@@ -4,7 +4,7 @@
 # Completely removes MnemoCore from a MiSTer. Run it directly on the
 # MiSTer, e.g. over SSH:
 #
-#   curl -kfsSL https://raw.githubusercontent.com/ElFDA/mnemocore/master/uninstall.sh | sh
+#   curl -kfsSL https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/uninstall.sh | sh
 #
 # Removes /media/fat/Scripts/mnemocore.sh, the whole
 # /media/fat/MnemoCore/ folder (helper, log, conf, antipanic.sh),

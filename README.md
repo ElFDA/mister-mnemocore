@@ -22,7 +22,7 @@ Stays up to date automatically whenever you run Update_all or the Downloader, no
 
 ```ini
 [mnemocore]
-db_url = 'https://raw.githubusercontent.com/ElFDA/mnemocore/master/db.json'
+db_url = 'https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/db.json'
 ```
 
 Run the Downloader (or Update_all), then launch `mnemocore` from the Scripts menu once: it self-configures on first interactive launch (autostart line, `bootcore=`/`bootcore_timeout=`/`recents=1`) since the Downloader itself is only allowed to place files, never touch `MiSTer.ini` or anything under `/linux`. Then reboot.
@@ -32,7 +32,7 @@ Run the Downloader (or Update_all), then launch `mnemocore` from the Scripts men
 Over SSH on the MiSTer:
 
 ```bash
-curl -kfsSL https://raw.githubusercontent.com/ElFDA/mnemocore/master/install.sh | sh
+curl -kfsSL https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/install.sh | sh
 reboot
 ```
 
@@ -93,7 +93,7 @@ sh /media/fat/MnemoCore/uninstall.sh
 Or, over SSH with network access:
 
 ```bash
-curl -kfsSL https://raw.githubusercontent.com/ElFDA/mnemocore/master/uninstall.sh | sh
+curl -kfsSL https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/uninstall.sh | sh
 ```
 
 Stops the daemon, removes every installed file, removes the autostart line, and comments out `bootcore=`/`bootcore_timeout=` in `MiSTer.ini`.

@@ -14,7 +14,7 @@ import hashlib
 import json
 import time
 
-RAW_BASE = "https://raw.githubusercontent.com/ElFDA/mnemocore/master"
+RAW_BASE = "https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master"
 
 # destination path on the SD card -> source file in this repo
 FILES = {

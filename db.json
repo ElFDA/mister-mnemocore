@@ -1,27 +1,27 @@
 {
     "v": 1,
     "db_id": "mnemocore",
-    "timestamp": 1787903093,
+    "timestamp": 1787908489,
     "files": {
         "Scripts/mnemocore.sh": {
             "hash": "346c526e26af97bf8252d8b0aee502c4",
             "size": 2960,
-            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/mnemocore.sh"
+            "url": "https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/mnemocore.sh"
         },
         "MnemoCore/mnemocore_helper.py": {
             "hash": "44891347929c5fc72da7bf1a0c4f0530",
             "size": 21943,
-            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/mnemocore_helper.py"
+            "url": "https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/mnemocore_helper.py"
         },
         "MnemoCore/antipanic.sh": {
             "hash": "4538a89533647bf09c8e29dae61a743d",
             "size": 2055,
-            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/antipanic.sh"
+            "url": "https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/antipanic.sh"
         },
         "MnemoCore/uninstall.sh": {
-            "hash": "c5d461c7a40ba5cab85bb6ea7fba67e0",
-            "size": 2075,
-            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/uninstall.sh"
+            "hash": "b0214225f6ddc1b4ba92556da2b69f61",
+            "size": 2082,
+            "url": "https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/uninstall.sh"
         }
     },
     "folders": {

@@ -4,7 +4,7 @@
 # Automated installer for MnemoCore. Run it directly on the MiSTer,
 # e.g. over SSH:
 #
-#   curl -kfsSL https://raw.githubusercontent.com/ElFDA/mnemocore/master/install.sh | sh
+#   curl -kfsSL https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master/install.sh | sh
 #
 # (-k / --no-check-certificate is required because stock MiSTer Linux
 # ships with no CA certificates, so plain HTTPS verification fails.)
@@ -27,7 +27,7 @@ cat << 'BANNER'
 BANNER
 
 MEDIA_FAT="${MEDIA_FAT:-/media/fat}"
-RAW_BASE="https://raw.githubusercontent.com/ElFDA/mnemocore/master"
+RAW_BASE="https://raw.githubusercontent.com/ElFDA/mister-mnemocore/master"
 
 if [ ! -e "$MEDIA_FAT/MiSTer.ini" ]; then
     echo "ERROR: $MEDIA_FAT/MiSTer.ini not found -- this doesn't look like a MiSTer root." >&2
