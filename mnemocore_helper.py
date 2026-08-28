@@ -167,7 +167,15 @@ def load_config():
        'enabled=1', defaults to True if missing).
      - disabled: set of individually excluded corenames (one name per
        line, '#' for comments; ARCADE_SENTINEL for all arcade cores).
-    Missing file = default behavior, autoboot active for everything."""
+    Missing file = default behavior, autoboot active for everything.
+
+    Deliberately strict about what counts as a valid 'enabled=' line
+    or a valid corename: a real-world config file was found missing
+    its '#' comment markers (cause unclear -- possibly hand-edited),
+    and a looser version of this parser mistook the comment line
+    documenting 'enabled=0 completely disables...' for the actual
+    enabled= directive, since it also starts with 'enabled=' and its
+    value just needed to not literally equal '0'."""
     enabled = True
     disabled = set()
     if not os.path.exists(CONFIG_FILE):
@@ -179,9 +187,15 @@ def load_config():
                 if not line or line.startswith("#"):
                     continue
                 if line.startswith("enabled="):
-                    enabled = line.split("=", 1)[1].strip() != "0"
-                else:
+                    value = line.split("=", 1)[1].strip()
+                    if value in ("0", "1"):
+                        enabled = value != "0"
+                    # else: malformed, ignore rather than misparse
+                elif line == ARCADE_SENTINEL or line in PROFILES:
                     disabled.add(line)
+                # else: not a recognized corename, ignore -- protects
+                # against a corrupted/hand-edited file polluting the
+                # exclusion set with garbage that can never match.
     except OSError as e:
         log(f"ERROR reading {CONFIG_FILE}: {e}")
     return enabled, disabled
@@ -271,6 +285,18 @@ def get_last_file_for_core(corename):
     return None
 
 
+def _insert_after_mister_section(lines, new_line):
+    """Inserts new_line right after the [MiSTer] section header
+    (case-insensitive match, same as MiSTer's own ini parser). Falls
+    back to appending at the very end only if no such header exists
+    at all (shouldn't normally happen -- every real MiSTer.ini has
+    one)."""
+    for i, line in enumerate(lines):
+        if line.strip().lower() == "[mister]":
+            return lines[:i + 1] + [new_line] + lines[i + 1:]
+    return lines + ["\n", new_line]
+
+
 def set_bootcore(value):
     if not os.path.exists(MISTER_INI):
         log("ERROR: MiSTer.ini not found")
@@ -292,7 +318,15 @@ def set_bootcore(value):
             new_lines.append(line)
 
     if not found:
-        new_lines.append(f"\nbootcore={value}\n")
+        # Insert right after [MiSTer] rather than appending at EOF:
+        # appending would land the line inside whatever custom section
+        # happens to be last in the file (e.g. a trailing [menu]
+        # section some other tool added), which MiSTer's ini parser
+        # only treats as "active" in specific circumstances --
+        # [MiSTer] itself is always active, so this is the only
+        # placement guaranteed to be read at boot regardless of what
+        # else is in the file.
+        new_lines = _insert_after_mister_section(new_lines, f"bootcore={value}\n")
 
     with open(MISTER_INI, "w") as f:
         f.writelines(new_lines)

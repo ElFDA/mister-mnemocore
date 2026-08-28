@@ -96,12 +96,23 @@ fi
 
 upsert_ini_key() {
     # upsert_ini_key <key> <value>
+    # If the key already exists, replaces it in place. Otherwise
+    # inserts it right after the [MiSTer] section header instead of
+    # appending at EOF -- appending would land the line inside
+    # whatever custom section happens to be last in the file (e.g. a
+    # trailing [menu] section some other tool added, common with
+    # Zaparoo), which MiSTer's ini parser only treats as "active" in
+    # specific circumstances. [MiSTer] itself is always active.
     key="$1"
     value="$2"
     if grep -qE "^;?${key}=" "$INI"; then
         sed -i "s|^;\{0,1\}${key}=.*|${key}=${value}|" "$INI"
     else
-        printf '%s=%s\n' "$key" "$value" >> "$INI"
+        awk -v k="$key" -v v="$value" '
+            { print }
+            !done && tolower($0) ~ /^\[mister\]/ { print k "=" v; done=1 }
+            END { if (!done) print k "=" v }
+        ' "$INI" > "$INI.tmp" && mv "$INI.tmp" "$INI"
     fi
 }
 

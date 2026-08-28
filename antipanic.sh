@@ -44,7 +44,15 @@ done
 if grep -qE "^;?bootcore=" "$INI"; then
     sed -i "s|^;\{0,1\}bootcore=.*|bootcore=AutoBoot.mgl|" "$INI"
 else
-    printf 'bootcore=AutoBoot.mgl\n' >> "$INI"
+    # Insert right after [MiSTer] rather than appending at EOF, so it
+    # lands somewhere MiSTer's ini parser always treats as active
+    # even if a custom section (e.g. a trailing [menu] from another
+    # tool) happens to be last in the file.
+    awk '
+        { print }
+        !done && tolower($0) ~ /^\[mister\]/ { print "bootcore=AutoBoot.mgl"; done=1 }
+        END { if (!done) print "bootcore=AutoBoot.mgl" }
+    ' "$INI" > "$INI.tmp" && mv "$INI.tmp" "$INI"
 fi
 echo "set bootcore=AutoBoot.mgl in $INI"
 
