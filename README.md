@@ -10,7 +10,9 @@ Before landing here, these were tried and dropped, in order:
 - LastPlayed (mrext): the service no longer reliably generates the `Last Played.mgl` shortcut on recent MiSTer versions; cause not conclusively isolated, intermittent behavior.
 - Zaparoo Core + `launch.last`: tracks the active game very well (`media.active` via API), but the `launch.last` command failed with `file not found: <setname>` for arcade cores with multiple variants/sets (`_alternatives`) or libraries with duplicate paths. Not 100% sure whether this is an actual bug in the Core's path resolution or a mistake on my end, I didn't dig further. Beyond that, I was also looking for something simpler than standing up Zaparoo's own media index/database just to resume the last game.
 
-MnemoCore bypasses all three by reading MiSTer's native data sources directly: `/tmp/CORENAME` and the `*_recent_*.cfg` files MiSTer's OSD writes on its own. It only touches `bootcore=` in `MiSTer.ini` and `AutoBoot.mgl`, no shared file or database with Zaparoo, so the two can coexist without conflicts.
+MnemoCore bypasses all three by reading MiSTer's native data sources directly: `/tmp/CORENAME` and the `*_recent_*.cfg` files MiSTer's OSD writes on its own. It only touches `bootcore=` in `MiSTer.ini` and `AutoBoot.mgl`, no shared file or database with Zaparoo, so the two can install side by side without conflicts.
+
+**Known limitation**: a game launched through the Zaparoo frontend is not currently picked up for autoboot. Zaparoo loads it the native way (`load_core` via `/dev/MiSTer_cmd`, so `/tmp/CORENAME` does update), but MiSTer's own recent-file tracking is tied to the OSD browser UI, which Zaparoo's launch path skips, so the `*_recent_*.cfg` files MnemoCore reads never get written for that launch. Being worked on.
 
 ## Installation
 
