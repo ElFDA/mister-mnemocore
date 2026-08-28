@@ -66,7 +66,7 @@ tail -10 /media/fat/MnemoCore/mnemocore.log
 
 ## Turning autoboot on/off
 
-Launch `mnemocore` from the MiSTer Scripts menu (the same file used for the daemon: launching it by hand opens the configuration menu instead of polling). A text menu opens with a general switch (entry 0) plus one entry per system (arcade included), each toggled on/off with its number. `a`/`n` enable/disable all systems, `s` saves and exits.
+Launch `mnemocore` from the MiSTer Scripts menu (the same file used for the daemon: launching it by hand opens the configuration menu instead of polling). A full-screen checklist opens (same style as Update_all.sh's settings screen) with a general switch plus one entry per system, arcade included. Up/Down to move, Space or Enter to toggle, `a`/`n` to enable/disable all systems, `s` to save and exit, `q` to exit without saving.
 
 The configuration is saved to `/media/fat/MnemoCore/mnemocore.conf` and read by the daemon on every polling cycle, changes take effect within a few seconds. An excluded system doesn't touch `bootcore=`: it stays set to the last valid game launched on a non-excluded system.
 

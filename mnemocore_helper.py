@@ -39,13 +39,15 @@ Behavior:
 Meant to be called repeatedly by mnemocore.sh (polling every few
 seconds), it isn't a daemon itself: it runs one pass and exits.
 
-Launched with the --configure argument, it instead opens a small text
-menu (no external libraries, just input() for compatibility with
-MiSTer's framebuffer console, identical on CRT and HDMI) to enable/
-disable autoboot as a whole and to exclude individual systems. This is
-how mnemocore.sh calls this script when it's launched by hand from the
-Scripts menu instead of from user-startup.sh.
+Launched with the --configure argument, it instead opens a full-screen
+curses menu (same approach as MiSTer's own Update_all.sh settings
+screen, confirmed to work fine on the framebuffer console MiSTer uses
+for both CRT and HDMI) to enable/disable autoboot as a whole and to
+exclude individual systems. This is how mnemocore.sh calls this script
+when it's launched by hand from the Scripts menu instead of from
+user-startup.sh.
 """
+import curses
 import glob
 import os
 import sys
@@ -362,88 +364,126 @@ def main():
     set_bootcore(mgl_name)
 
 
-def _menu_entries():
-    """Special arcade entry + one system for every corename in
-    PROFILES, in alphabetical order."""
-    entries = [(ARCADE_SENTINEL, ARCADE_LABEL)]
-    entries += [(name, name) for name in sorted(PROFILES)]
-    return entries
+_GENERAL_SWITCH = "__ENABLED__"
 
 
-def _render_menu(entries, enabled, disabled):
-    os.system("clear")
-    print("=" * 60)
-    print(" MnemoCore - configuration")
-    print("=" * 60)
-    print()
-    print(f"   0) [{'X' if enabled else ' '}] Autoboot enabled (general switch)")
-    print()
-    print(" Systems included in autoboot (only if the general switch is on):")
-    print()
-    for i, (key, label) in enumerate(entries, start=1):
-        mark = " " if key in disabled else "X"
-        print(f" {i:>3}) [{mark}] {label}")
-    print()
-    print("-" * 60)
-    print(" Type a number and Enter to toggle that entry.")
-    print(" a = enable all systems       n = disable all systems")
-    print(" s = save and exit            q = exit without saving")
-    print("-" * 60)
+def _menu_items():
+    """General switch entry + special arcade entry + one system for
+    every corename in PROFILES, in alphabetical order."""
+    items = [(_GENERAL_SWITCH, "Autoboot enabled (general switch)")]
+    items.append((ARCADE_SENTINEL, ARCADE_LABEL))
+    items += [(name, name) for name in sorted(PROFILES)]
+    return items
+
+
+def _run_menu(stdscr, items):
+    """Full-screen curses checklist, same approach as Update_all.sh's
+    settings screen: bordered window, reverse-video highlight for the
+    selected row (works without color, fine on CRT), arrow keys to
+    move, Space/Enter to toggle. Returns (enabled, disabled, saved)."""
+    curses.curs_set(0)
+    stdscr.keypad(True)
+
+    enabled, disabled = load_config()
+    selected = 0
+    top = 0
+    dirty = False
+    quit_confirm = False
+    status = ""
+
+    def is_checked(idx):
+        key, _ = items[idx]
+        if key == _GENERAL_SWITCH:
+            return enabled
+        return key not in disabled
+
+    def toggle(idx):
+        nonlocal enabled, dirty
+        key, _ = items[idx]
+        if key == _GENERAL_SWITCH:
+            enabled = not enabled
+        elif key in disabled:
+            disabled.discard(key)
+        else:
+            disabled.add(key)
+        dirty = True
+
+    while True:
+        stdscr.erase()
+        max_y, max_x = stdscr.getmaxyx()
+        stdscr.border()
+
+        title = " MnemoCore - configuration "
+        stdscr.addstr(0, max(1, (max_x - len(title)) // 2), title[:max_x - 2], curses.A_BOLD)
+
+        list_top = 2
+        list_height = max(1, max_y - list_top - 3)
+        if selected < top:
+            top = selected
+        if selected >= top + list_height:
+            top = selected - list_height + 1
+
+        for row, idx in enumerate(range(top, min(len(items), top + list_height))):
+            key, label = items[idx]
+            mark = "X" if is_checked(idx) else " "
+            line = f"[{mark}] {label}"
+            attr = curses.A_REVERSE if idx == selected else curses.A_NORMAL
+            stdscr.addstr(list_top + row, 2, line[:max_x - 4].ljust(max_x - 4), attr)
+            if key == _GENERAL_SWITCH and row + 1 < list_height:
+                stdscr.hline(list_top + row + 1, 2, ord('-'), max_x - 4)
+
+        footer1 = "Up/Down move   Space/Enter toggle   A all   N none"
+        footer2 = "S save and exit   Q exit without saving"
+        stdscr.addstr(max_y - 3, 2, footer1[:max_x - 4], curses.A_DIM)
+        stdscr.addstr(max_y - 2, 2, footer2[:max_x - 4], curses.A_DIM)
+        if status:
+            stdscr.addstr(max_y - 2, 2, status[:max_x - 4], curses.A_BOLD)
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+        status = ""
+
+        if ch in (curses.KEY_UP, ord('k')):
+            selected = max(0, selected - 1)
+            quit_confirm = False
+        elif ch in (curses.KEY_DOWN, ord('j')):
+            selected = min(len(items) - 1, selected + 1)
+            quit_confirm = False
+        elif ch in (curses.KEY_ENTER, 10, 13, ord(' ')):
+            toggle(selected)
+            quit_confirm = False
+        elif ch in (ord('a'), ord('A')):
+            disabled.clear()
+            dirty = True
+            quit_confirm = False
+        elif ch in (ord('n'), ord('N')):
+            disabled = {key for key, _ in items[1:]}
+            dirty = True
+            quit_confirm = False
+        elif ch in (ord('s'), ord('S')):
+            save_config(enabled, disabled)
+            return enabled, disabled, True
+        elif ch in (ord('q'), ord('Q'), 27):
+            if dirty and not quit_confirm:
+                status = "Unsaved changes! Press Q again to quit, any other key to cancel."
+                quit_confirm = True
+                continue
+            return enabled, disabled, False
+        else:
+            quit_confirm = False
 
 
 def configure():
-    """Interactive text menu for the general switch and per-core
+    """Full-screen curses menu for the general switch and per-core
     exclusions. Called by mnemocore.sh when launched by hand from the
     Scripts menu (instead of from user-startup.sh)."""
-    entries = _menu_entries()
-    enabled, disabled = load_config()
-    dirty = False
-
-    while True:
-        _render_menu(entries, enabled, disabled)
-        choice = input("> ").strip().lower()
-
-        if choice == "q":
-            if dirty:
-                confirm = input("Exit without saving changes? [y/N] ").strip().lower()
-                if confirm != "y":
-                    continue
-            print("Exiting without saving.")
-            return
-
-        if choice == "s":
-            save_config(enabled, disabled)
-            print(f"Configuration saved to {CONFIG_FILE}")
-            print("Changes will be applied on the daemon's next poll (a few seconds at most).")
-            return
-
-        if choice == "0":
-            enabled = not enabled
-            dirty = True
-            continue
-
-        if choice == "a":
-            disabled.clear()
-            dirty = True
-            continue
-
-        if choice == "n":
-            disabled = {key for key, _ in entries}
-            dirty = True
-            continue
-
-        if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(entries):
-                key = entries[idx][0]
-                if key in disabled:
-                    disabled.discard(key)
-                else:
-                    disabled.add(key)
-                dirty = True
-                continue
-
-        input("Invalid choice, press Enter to continue...")
+    items = _menu_items()
+    enabled, disabled, saved = curses.wrapper(_run_menu, items)
+    if saved:
+        print(f"Configuration saved to {CONFIG_FILE}")
+        print("Changes will be applied on the daemon's next poll (a few seconds at most).")
+    else:
+        print("Exited without saving.")
 
 
 if __name__ == "__main__":
