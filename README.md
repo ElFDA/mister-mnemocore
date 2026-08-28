@@ -12,7 +12,22 @@ Before landing here, these were tried and dropped, in order:
 
 MnemoCore bypasses all three by reading MiSTer's native data sources directly: `/tmp/CORENAME` and the `*_recent_*.cfg` files MiSTer's OSD writes on its own. It only touches `bootcore=` in `MiSTer.ini` and `AutoBoot.mgl`, no shared file or database with Zaparoo, so the two can coexist without conflicts.
 
-## Quick install
+## Installation
+
+Three ways to install, pick one:
+
+### 1. Downloader / Update_all (recommended)
+
+Stays up to date automatically whenever you run Update_all or the Downloader, no need to re-run anything by hand for updates. Add this to the bottom of `/media/fat/downloader.ini`:
+
+```ini
+[mnemocore]
+db_url = 'https://raw.githubusercontent.com/ElFDA/mnemocore/master/db.json'
+```
+
+Run the Downloader (or Update_all), then launch `mnemocore` from the Scripts menu once: it self-configures on first interactive launch (autostart line, `bootcore=`/`bootcore_timeout=`/`recents=1`) since the Downloader itself is only allowed to place files, never touch `MiSTer.ini` or anything under `/linux`. Then reboot.
+
+### 2. Automatic
 
 Over SSH on the MiSTer:
 
@@ -25,7 +40,7 @@ Automatically copies the files, adds the autostart line, and sets `bootcore=Auto
 
 If you'd rather read [`install.sh`](install.sh) before running it, or don't have network access on the MiSTer, use manual installation instead.
 
-## Manual installation
+### 3. Manual
 
 Copy the files to the MiSTer SD card with FileZilla or any other FTP/SFTP client:
 
@@ -41,39 +56,13 @@ chmod +x /media/fat/MnemoCore/antipanic.sh
 chmod +x /media/fat/MnemoCore/uninstall.sh
 ```
 
-Add this line to `/media/fat/linux/user-startup.sh` (create it if it doesn't exist, with `#!/bin/sh` as the first line):
-
-```
-[ -e /media/fat/Scripts/mnemocore.sh ] && setsid /media/fat/Scripts/mnemocore.sh < /dev/null >> /media/fat/MnemoCore/mnemocore.log 2>&1 &
-```
-
-In `MiSTer.ini`, section `[MiSTer]`:
-
-```ini
-bootcore=AutoBoot.mgl
-bootcore_timeout=1
-recents=1
-```
-
-`recents=1` is required: without it MiSTer doesn't write the `_recent_*.cfg` files MnemoCore reads, so nothing would ever autoboot.
-
-Reboot, then verify with:
+Launch `mnemocore` from the Scripts menu once: it self-configures (autostart line in `user-startup.sh`, `bootcore=`/`bootcore_timeout=`/`recents=1` in `MiSTer.ini`) the same way it does when installed via Downloader. Then reboot and verify:
 
 ```bash
+reboot
 ps | grep mnemocore
 tail -10 /media/fat/MnemoCore/mnemocore.log
 ```
-
-## Installing via Downloader
-
-MnemoCore also works as a custom Downloader database, so it stays up to date whenever you run Update_all or the Downloader directly, no need to re-run `install.sh` for updates. Add this to the bottom of `/media/fat/downloader.ini`:
-
-```ini
-[mnemocore]
-db_url = 'https://raw.githubusercontent.com/ElFDA/mnemocore/master/db.json'
-```
-
-Run the Downloader (or Update_all), reboot, then launch `mnemocore` from the Scripts menu once: it self-configures on first interactive launch (autostart line, `bootcore=`/`bootcore_timeout=`/`recents=1`) since the Downloader itself is only allowed to place files, never touch `MiSTer.ini` or anything under `/linux`.
 
 ## Turning autoboot on/off
 
