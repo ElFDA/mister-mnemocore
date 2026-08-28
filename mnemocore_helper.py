@@ -314,6 +314,21 @@ def write_mgl(rbf, delay, file_type, index, path):
     return BOOT_MGL_NAME
 
 
+def disable_autoboot_now():
+    """Neutralizes bootcore= immediately (same trick as antipanic.sh):
+    forces it to AutoBoot.mgl and deletes that file, so the very next
+    boot falls back to the menu. Without this, turning the general
+    switch off in the configure menu only stops *future* updates to
+    bootcore= -- the value already sitting in MiSTer.ini from before
+    (whatever core/game was last active) would otherwise still
+    autoboot on the next reboot, silently ignoring the switch."""
+    set_bootcore(BOOT_MGL_NAME)
+    mgl_path = os.path.join(BOOT_MGL_DIR, BOOT_MGL_NAME)
+    if os.path.exists(mgl_path):
+        os.remove(mgl_path)
+        log(f"removed {mgl_path} (general switch turned off)")
+
+
 def resolve_abs_folder(folder):
     """The 'folder' field read from the *_recent_*.cfg file can be
     relative (e.g. '../usb0/games/MegaDrive') or already an absolute
@@ -471,6 +486,8 @@ def _run_menu(stdscr, items):
             quit_confirm = False
         elif ch in (ord('s'), ord('S')):
             save_config(enabled, disabled)
+            if not enabled:
+                disable_autoboot_now()
             return enabled, disabled, True
         elif ch in (ord('q'), ord('Q'), 27):
             if dirty and not quit_confirm:
@@ -490,7 +507,10 @@ def configure():
     enabled, disabled, saved = curses.wrapper(_run_menu, items)
     if saved:
         print(f"Configuration saved to {CONFIG_FILE}")
-        print("Changes will be applied on the daemon's next poll (a few seconds at most).")
+        if enabled:
+            print("Changes will be applied on the daemon's next poll (a few seconds at most).")
+        else:
+            print("Autoboot disabled: bootcore= reset now, next boot goes to the menu.")
     else:
         print("Exited without saving.")
 
