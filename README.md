@@ -64,6 +64,17 @@ ps | grep mnemocore
 tail -10 /media/fat/MnemoCore/mnemocore.log
 ```
 
+## Installing via Downloader
+
+MnemoCore also works as a custom Downloader database, so it stays up to date whenever you run Update_all or the Downloader directly, no need to re-run `install.sh` for updates. Add this to the bottom of `/media/fat/downloader.ini`:
+
+```ini
+[mnemocore]
+db_url = 'https://raw.githubusercontent.com/ElFDA/mnemocore/master/db.json'
+```
+
+Run the Downloader (or Update_all), reboot, then launch `mnemocore` from the Scripts menu once: it self-configures on first interactive launch (autostart line, `bootcore=`/`bootcore_timeout=`/`recents=1`) since the Downloader itself is only allowed to place files, never touch `MiSTer.ini` or anything under `/linux`.
+
 ## Turning autoboot on/off
 
 Launch `mnemocore` from the MiSTer Scripts menu (the same file used for the daemon: launching it by hand opens the configuration menu instead of polling). A full-screen checklist opens (same style as Update_all.sh's settings screen) with a general switch plus one entry per system, arcade included. Up/Down to move, Space or Enter to toggle, `a`/`n` to enable/disable all systems, `s` to save and exit, `q` to exit without saving.

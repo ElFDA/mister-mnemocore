@@ -1,0 +1,30 @@
+{
+    "v": 1,
+    "db_id": "mnemocore",
+    "timestamp": 1787898273,
+    "files": {
+        "Scripts/mnemocore.sh": {
+            "hash": "346c526e26af97bf8252d8b0aee502c4",
+            "size": 2960,
+            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/mnemocore.sh"
+        },
+        "MnemoCore/mnemocore_helper.py": {
+            "hash": "3c8fb8a2024f8457ed842a1020e0a7ee",
+            "size": 21375,
+            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/mnemocore_helper.py"
+        },
+        "MnemoCore/antipanic.sh": {
+            "hash": "4538a89533647bf09c8e29dae61a743d",
+            "size": 2055,
+            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/antipanic.sh"
+        },
+        "MnemoCore/uninstall.sh": {
+            "hash": "c5d461c7a40ba5cab85bb6ea7fba67e0",
+            "size": 2075,
+            "url": "https://raw.githubusercontent.com/ElFDA/mnemocore/master/uninstall.sh"
+        }
+    },
+    "folders": {
+        "MnemoCore/": {}
+    }
+}

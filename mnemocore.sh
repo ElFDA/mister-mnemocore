@@ -12,19 +12,66 @@
 #   [ -e /media/fat/Scripts/mnemocore.sh ] && setsid /media/fat/Scripts/mnemocore.sh < /dev/null >> /media/fat/MnemoCore/mnemocore.log 2>&1 &
 #
 # Launched by hand from the Scripts menu instead (stdin is a terminal,
-# not /dev/null), it opens the configuration menu instead of the
-# daemon: from there you can enable/disable autoboot as a whole or
-# exclude individual systems.
+# not /dev/null), it first self-configures if needed (autostart line
+# in user-startup.sh, bootcore=/bootcore_timeout=/recents=1 in
+# MiSTer.ini -- idempotent, same checks install.sh does) and then
+# opens the configuration menu instead of the daemon. This makes
+# MnemoCore usable straight from a Downloader/Update_all custom
+# database too: the Downloader is only allowed to place files, never
+# to edit MiSTer.ini or anything under /linux, so this self-setup on
+# first interactive launch is what actually wires everything up.
 
-HELPER="/media/fat/MnemoCore/mnemocore_helper.py"
-LOG="/media/fat/MnemoCore/mnemocore.log"
+MEDIA_FAT="${MEDIA_FAT:-/media/fat}"
+HELPER="$MEDIA_FAT/MnemoCore/mnemocore_helper.py"
+LOG="$MEDIA_FAT/MnemoCore/mnemocore.log"
 POLL_SECONDS=3
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"
 }
 
+ensure_setup() {
+    STARTUP="$MEDIA_FAT/linux/user-startup.sh"
+    STARTUP_LINE="[ -e $MEDIA_FAT/Scripts/mnemocore.sh ] && setsid $MEDIA_FAT/Scripts/mnemocore.sh < /dev/null >> $MEDIA_FAT/MnemoCore/mnemocore.log 2>&1 &"
+
+    if [ ! -e "$STARTUP" ]; then
+        mkdir -p "$MEDIA_FAT/linux"
+        printf '#!/bin/sh\n' > "$STARTUP"
+    fi
+
+    if ! grep -qF "mnemocore.sh" "$STARTUP"; then
+        printf '%s\n' "$STARTUP_LINE" >> "$STARTUP"
+        echo "Added autostart line to $STARTUP"
+    fi
+
+    INI="$MEDIA_FAT/MiSTer.ini"
+    if [ -e "$INI" ]; then
+        BACKUP="$INI.mnemocore-bak"
+        [ -e "$BACKUP" ] || cp "$INI" "$BACKUP"
+
+        upsert_ini_key() {
+            key="$1"
+            value="$2"
+            if grep -qE "^;?${key}=" "$INI"; then
+                sed -i "s|^;\{0,1\}${key}=.*|${key}=${value}|" "$INI"
+            else
+                printf '%s=%s\n' "$key" "$value" >> "$INI"
+            fi
+        }
+
+        if ! grep -q "^bootcore=AutoBoot.mgl$" "$INI" \
+            || ! grep -q "^bootcore_timeout=1$" "$INI" \
+            || ! grep -q "^recents=1$" "$INI"; then
+            upsert_ini_key bootcore AutoBoot.mgl
+            upsert_ini_key bootcore_timeout 1
+            upsert_ini_key recents 1
+            echo "Configured $INI (bootcore=AutoBoot.mgl, bootcore_timeout=1, recents=1)"
+        fi
+    fi
+}
+
 if [ -t 0 ]; then
+    ensure_setup
     python3 "$HELPER" --configure
     exit 0
 fi
