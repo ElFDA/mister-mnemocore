@@ -21,9 +21,9 @@ curl -kfsSL https://raw.githubusercontent.com/ElFDA/mnemocore/master/install.sh 
 reboot
 ```
 
-Copies the files, adds the autostart line, and sets `bootcore=AutoBoot.mgl`, `bootcore_timeout=1` and `recents=1` in `MiSTer.ini` (backing it up first, to `MiSTer.ini.mnemocore-bak`). Safe to re-run.
+Automatically copies the files, adds the autostart line, and sets `bootcore=AutoBoot.mgl`, `bootcore_timeout=1` and `recents=1` in `MiSTer.ini` (backing it up first, to `MiSTer.ini.mnemocore-bak`). Safe to re-run.
 
-`-k` is required because stock MiSTer Linux ships with no CA certificates, so plain HTTPS verification fails. If you'd rather read [`install.sh`](install.sh) before running it, or don't have network access on the MiSTer, use manual installation instead.
+If you'd rather read [`install.sh`](install.sh) before running it, or don't have network access on the MiSTer, use manual installation instead.
 
 ## Manual installation
 
