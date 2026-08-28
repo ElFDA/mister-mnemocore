@@ -1,0 +1,453 @@
+#!/usr/bin/env python3
+"""
+mnemocore helper.
+
+100% native MiSTer data sources, no external dependencies:
+
+ 1. /tmp/CORENAME
+    Name of the currently running core (e.g. "MegaDrive", "Arcade").
+    Written by MiSTer itself on every core change.
+
+ 2. /media/fat/config/<CORENAME>_recent_1.cfg
+    Binary file with NUL-separated records that the OSD browser writes
+    when you browse a core's own folder, to remember the last file
+    selected there. The first record is the most recent one (MRU
+    order). Record structure: <folder>\\0<filename>\\0<display_name>\\0
+
+ 3. /media/fat/config/cores_recent.cfg
+    Same record format, but shared across every core -- what MiSTer
+    writes instead when a game is launched through the unified
+    searchable Arcade menu (which is how most arcade games actually
+    get launched). Only trusted as a fallback when its entry's
+    filename matches the current corename, see get_last_file_for_core().
+
+Requires recents=1 in MiSTer.ini -- without it MiSTer doesn't write
+either of the files above at all (cfg.recents defaults to off).
+
+Behavior:
+ - Arcade (.mra extension) or entry already .mgl: bootcore= points
+   directly to the file, MiSTer already knows how to load it on its own.
+ - Console/computer (ROM loaded directly, e.g. .md/.sfc/.nes):
+   generates AutoBoot.mgl on the fly with the right parameters (rbf/
+   delay/type/index) taken from the PROFILES table, and points
+   bootcore there.
+ - No active game (you're in the menu, CORENAME empty or "MENU"):
+   nothing is touched, bootcore stays at the last valid game.
+ - Core without a profile in PROFILES: logged and ignored, bootcore
+   stays unchanged until you add the missing entry.
+
+Meant to be called repeatedly by mnemocore.sh (polling every few
+seconds), it isn't a daemon itself: it runs one pass and exits.
+
+Launched with the --configure argument, it instead opens a small text
+menu (no external libraries, just input() for compatibility with
+MiSTer's framebuffer console, identical on CRT and HDMI) to enable/
+disable autoboot as a whole and to exclude individual systems. This is
+how mnemocore.sh calls this script when it's launched by hand from the
+Scripts menu instead of from user-startup.sh.
+"""
+import glob
+import os
+import sys
+
+CORENAME_FILE = "/tmp/CORENAME"
+CONFIG_DIR = "/media/fat/config"
+MISTER_INI = "/media/fat/MiSTer.ini"
+BOOT_MGL_DIR = "/media/fat"
+BOOT_MGL_NAME = "AutoBoot.mgl"
+LOG = "/media/fat/MnemoCore/mnemocore.log"
+CONFIG_FILE = "/media/fat/MnemoCore/mnemocore.conf"
+
+# Special key used in CONFIG_FILE to disable autoboot for ALL arcade
+# cores (.mra/.mgl files), which don't go through the PROFILES table
+# and therefore don't have a fixed corename to list one by one.
+ARCADE_SENTINEL = "__ARCADE__"
+ARCADE_LABEL = "Arcade (all cores with an .mra file)"
+
+# MGL parameters (rbf, delay, type, index) per system.
+# Key = exact value returned by /tmp/CORENAME for that core.
+# Source: official MiSTer MGL wiki
+# https://mister-devel.github.io/MkDocs_MiSTer/advanced/mgl/
+PROFILES = {
+    "Minimig":         dict(rbf="_Computer/Minimig",       delay=1, index=0, type="f"),
+    "Arcadia":         dict(rbf="_Console/Arcadia",         delay=1, index=1, type="f"),
+    "AdventureVision": dict(rbf="_Console/AdventureVision", delay=1, index=1, type="f"),
+    "Astrocade":       dict(rbf="_Console/Astrocade",       delay=1, index=1, type="f"),
+    "Atari7800":       dict(rbf="_Console/Atari7800",       delay=1, index=1, type="f"),
+    "Atari5200":       dict(rbf="_Console/Atari5200",       delay=1, index=1, type="s"),
+    "AtariLynx":       dict(rbf="_Console/AtariLynx",       delay=1, index=0, type="f"),
+    "C64":             dict(rbf="_Computer/C64",            delay=1, index=1, type="f"),
+    "ChannelF":        dict(rbf="_Console/ChannelF",        delay=1, index=1, type="f"),
+    "ColecoVision":    dict(rbf="_Console/ColecoVision",    delay=1, index=1, type="f"),
+    "CreatiVision":    dict(rbf="_Console/CreatiVision",    delay=1, index=1, type="f"),
+    "Gameboy2P":       dict(rbf="_Console/Gameboy2P",       delay=2, index=1, type="f"),
+    "Gameboy":         dict(rbf="_Console/Gameboy",         delay=2, index=1, type="f"),
+    "Gamate":          dict(rbf="_Console/Gamate",          delay=1, index=1, type="f"),
+    "GnW":             dict(rbf="_Console/GnW",             delay=1, index=1, type="f"),
+    "SMS":             dict(rbf="_Console/SMS",             delay=1, index=1, type="f"),
+    "GBA2P":           dict(rbf="_Console/GBA2P",           delay=2, index=0, type="f"),
+    "GBA":             dict(rbf="_Console/GBA",             delay=2, index=1, type="f"),
+    "MegaDrive":       dict(rbf="_Console/MegaDrive",       delay=1, index=1, type="f"),
+    "Intellivision":   dict(rbf="_Console/Intellivision",   delay=1, index=1, type="f"),
+    "MegaCD":          dict(rbf="_Console/MegaCD",          delay=1, index=0, type="s"),
+    "N64":             dict(rbf="_Console/N64",             delay=1, index=1, type="f"),
+    "NeoGeo":          dict(rbf="_Console/NeoGeo",          delay=1, index=1, type="f"),
+    "NES":             dict(rbf="_Console/NES",             delay=2, index=1, type="f"),
+    "Odyssey2":        dict(rbf="_Console/Odyssey2",        delay=1, index=1, type="f"),
+    "PSX":             dict(rbf="_Console/PSX",             delay=1, index=1, type="s"),
+    "WonderSwan":      dict(rbf="_Console/WonderSwan",      delay=1, index=1, type="f"),
+    "PokemonMini":     dict(rbf="_Console/PokemonMini",     delay=1, index=1, type="f"),
+    "Saturn":          dict(rbf="_Console/Saturn",          delay=1, index=0, type="s"),
+    "S32X":            dict(rbf="_Console/S32X",            delay=1, index=1, type="f"),
+    "SGB":             dict(rbf="_Console/SGB",             delay=1, index=1, type="f"),
+    "SNES":            dict(rbf="_Console/SNES",            delay=2, index=0, type="f"),
+    "SuperVision":     dict(rbf="_Console/SuperVision",     delay=1, index=1, type="s"),
+    "TurboGrafx16":    dict(rbf="_Console/TurboGrafx16",    delay=1, index=0, type="f"),
+    "VC4000":          dict(rbf="_Console/VC4000",          delay=1, index=1, type="f"),
+    "Vectrex":         dict(rbf="_Console/Vectrex",         delay=1, index=1, type="f"),
+
+    # Below: additional systems cross-checked against wizzomafizzo/mrext's
+    # pkg/games/systems.go (an actively maintained tool with its own MGL
+    # generation logic), restricted to entries where that source has a
+    # single, unambiguous slot -- or, for multi-slot systems, exactly one
+    # "file" (type=f) slot, matching the same convention already used
+    # above for C64 (favor the single-file game slot over an alternate
+    # disk-image slot, consistent with this project's one-<file>-tag
+    # limitation, see README "Known limitations").
+    "3DO":             dict(rbf="_Console/3DO",             delay=1, index=1, type="s"),
+    "Casio_PV-1000":   dict(rbf="_Console/Casio_PV-1000",   delay=1, index=1, type="f"),
+    "CDi":             dict(rbf="_Console/CDi",             delay=1, index=1, type="s"),
+    "Jaguar":          dict(rbf="_Console/Jaguar",           delay=1, index=1, type="s"),
+    "AcornAtom":       dict(rbf="_Computer/AcornAtom",       delay=1, index=1, type="s"),
+    "AcornElectron":   dict(rbf="_Computer/AcornElectron",   delay=1, index=0, type="s"),
+    "AliceMC10":       dict(rbf="_Computer/AliceMC10",       delay=1, index=1, type="f"),
+    "Apogee":          dict(rbf="_Computer/Apogee",          delay=1, index=1, type="f"),
+    "Apple-I":         dict(rbf="_Computer/Apple-I",         delay=1, index=1, type="f"),
+    "EDSAC":           dict(rbf="_Computer/EDSAC",           delay=1, index=1, type="f"),
+    "Galaksija":       dict(rbf="_Computer/Galaksija",       delay=1, index=1, type="f"),
+    "Interact":        dict(rbf="_Computer/Interact",        delay=1, index=1, type="f"),
+    "Jupiter":         dict(rbf="_Computer/Jupiter",         delay=1, index=1, type="f"),
+    "Laser310":        dict(rbf="_Computer/Laser310",        delay=1, index=1, type="f"),
+    "Lynx48":          dict(rbf="_Computer/Lynx48",          delay=1, index=1, type="f"),
+    "MultiComp":       dict(rbf="_Computer/MultiComp",       delay=1, index=1, type="s"),
+    "Oric":            dict(rbf="_Computer/Oric",            delay=1, index=0, type="s"),
+    "PDP1":            dict(rbf="_Computer/PDP1",            delay=1, index=1, type="f"),
+    "PET2001":         dict(rbf="_Computer/PET2001",         delay=1, index=1, type="f"),
+    "PMD85":           dict(rbf="_Computer/PMD85",           delay=1, index=1, type="f"),
+    "TatungEinstein":  dict(rbf="_Computer/TatungEinstein",  delay=1, index=0, type="s"),
+    "TSConf":          dict(rbf="_Computer/TSConf",          delay=1, index=0, type="s"),
+    "UK101":           dict(rbf="_Computer/UK101",           delay=1, index=1, type="f"),
+    "Specialist":      dict(rbf="_Computer/Specialist",      delay=1, index=0, type="f"),
+    "QL":              dict(rbf="_Computer/QL",              delay=1, index=2, type="f"),
+    "ZXNext":          dict(rbf="_Computer/ZXNext",          delay=1, index=1, type="f"),
+    "BK0011M":         dict(rbf="_Computer/BK0011M",         delay=1, index=1, type="f"),
+    "C16":             dict(rbf="_Computer/C16",             delay=1, index=1, type="f"),
+}
+
+
+def log(msg):
+    with open(LOG, "a") as f:
+        f.write(msg + "\n")
+
+
+def load_config():
+    """Reads CONFIG_FILE and returns (enabled, disabled):
+     - enabled: bool, general autoboot switch (line 'enabled=0'/
+       'enabled=1', defaults to True if missing).
+     - disabled: set of individually excluded corenames (one name per
+       line, '#' for comments; ARCADE_SENTINEL for all arcade cores).
+    Missing file = default behavior, autoboot active for everything."""
+    enabled = True
+    disabled = set()
+    if not os.path.exists(CONFIG_FILE):
+        return enabled, disabled
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("enabled="):
+                    enabled = line.split("=", 1)[1].strip() != "0"
+                else:
+                    disabled.add(line)
+    except OSError as e:
+        log(f"ERROR reading {CONFIG_FILE}: {e}")
+    return enabled, disabled
+
+
+def save_config(enabled, disabled):
+    lines = [
+        "# File generated/managed by 'mnemocore.sh' launched from the Scripts menu.\n",
+        "# enabled=0 completely disables autoboot, enabled=1 (default) re-enables it.\n",
+        "# Every other line = individually excluded corename\n",
+        f"# ({ARCADE_SENTINEL} for all arcade cores). Can also be edited by hand.\n",
+        f"enabled={1 if enabled else 0}\n",
+    ]
+    lines += [f"{name}\n" for name in sorted(disabled)]
+    with open(CONFIG_FILE, "w") as f:
+        f.writelines(lines)
+
+
+def get_current_core():
+    try:
+        with open(CORENAME_FILE, "r") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def _read_recent_record(cfg_path):
+    """Reads the first record (dir, name, label triplet, most recent
+    first) out of a MiSTer *_recent_*.cfg-style file and returns
+    (folder, filename), or None if the file is missing/empty/invalid.
+    Works for both the per-core files and the shared cores_recent.cfg
+    (same fixed-size-struct-with-NUL-padding layout under the hood --
+    splitting on NUL and dropping empty parts recovers the fields
+    regardless of the padding)."""
+    try:
+        with open(cfg_path, "rb") as f:
+            data = f.read()
+    except OSError as e:
+        log(f"ERROR reading {cfg_path}: {e}")
+        return None
+
+    parts = [p.decode("utf-8", errors="replace") for p in data.split(b"\x00") if p]
+    if len(parts) < 2:
+        return None
+
+    folder = parts[0]
+    filename = parts[1]
+    if not filename.strip():
+        return None
+    return folder, filename
+
+
+def get_last_file_for_core(corename):
+    """Reads <CORENAME>_recent_N.cfg (usually _1), the per-core/folder
+    recent list MiSTer writes when you browse a core's own folder.
+
+    Falls back to the shared cores_recent.cfg if that's missing: this
+    is what MiSTer writes instead when a game is launched through the
+    unified searchable Arcade menu (source: MiSTer's own recent.cpp/
+    menu.cpp -- recent_update(..., -1) targets "cores_recent.cfg"
+    rather than a per-corename file for that selection path), which is
+    how most arcade games actually get launched in practice.
+
+    cores_recent.cfg isn't scoped to a single core -- it's a shared
+    MRU list across every selection made that way, of any core. To
+    avoid picking up a stale/unrelated entry (e.g. the last arcade
+    game played, while some OTHER known console core with no
+    per-corename file of its own is now active), the fallback is only
+    attempted when corename isn't one of PROFILES' known console/
+    computer corenames -- arcade short names (e.g. "bgaregga") never
+    are, by construction, so this precisely scopes the fallback to the
+    arcade case without ever overriding a recognized console core.
+    (Matching the entry's filename against corename, tried in an
+    earlier version, doesn't work: confirmed on real hardware that the
+    "name" field holds the .mra's full display filename, e.g. "Battle
+    Garegga (Europe - USA - Japan - Asia) (Sat Feb 3 1996).mra", not
+    the short name /tmp/CORENAME holds.)"""
+    candidates = sorted(glob.glob(os.path.join(CONFIG_DIR, f"{corename}_recent_*.cfg")))
+    if candidates:
+        result = _read_recent_record(candidates[0])
+        if result is not None:
+            return result
+
+    if corename not in PROFILES:
+        return _read_recent_record(os.path.join(CONFIG_DIR, "cores_recent.cfg"))
+
+    return None
+
+
+def set_bootcore(value):
+    if not os.path.exists(MISTER_INI):
+        log("ERROR: MiSTer.ini not found")
+        return
+
+    with open(MISTER_INI, "r") as f:
+        lines = f.readlines()
+
+    found = False
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("bootcore=") or stripped.startswith(";bootcore="):
+            if not found:
+                new_lines.append(f"bootcore={value}\n")
+                found = True
+            # subsequent duplicate bootcore= lines are dropped
+        else:
+            new_lines.append(line)
+
+    if not found:
+        new_lines.append(f"\nbootcore={value}\n")
+
+    with open(MISTER_INI, "w") as f:
+        f.writelines(new_lines)
+
+    log(f"bootcore set to: {value}")
+
+
+def write_mgl(rbf, delay, file_type, index, path):
+    mgl_path = os.path.join(BOOT_MGL_DIR, BOOT_MGL_NAME)
+    xml = (
+        "<mistergamedescription>\n"
+        f"\t<rbf>{rbf}</rbf>\n"
+        f'\t<file delay="{delay}" type="{file_type}" index="{index}" path="{path}"/>\n'
+        "</mistergamedescription>\n"
+    )
+    with open(mgl_path, "w") as f:
+        f.write(xml)
+    log(f"wrote {mgl_path}: rbf={rbf} delay={delay} type={file_type} index={index} path={path}")
+    return BOOT_MGL_NAME
+
+
+def resolve_abs_folder(folder):
+    """The 'folder' field read from the *_recent_*.cfg file can be
+    relative (e.g. '../usb0/games/MegaDrive') or already an absolute
+    path. We always normalize it relative to /media/fat."""
+    if folder.startswith("/"):
+        return folder
+    return os.path.normpath(os.path.join("/media/fat", folder))
+
+
+def main():
+    enabled, disabled = load_config()
+    if not enabled:
+        # Autoboot disabled by the general switch: don't touch anything.
+        return
+
+    corename = get_current_core()
+    if not corename or corename.upper() in ("MENU", ""):
+        # In the menu, no active game: don't touch bootcore.
+        return
+
+    result = get_last_file_for_core(corename)
+    if result is None:
+        log(f"no recent file found for core '{corename}'")
+        return
+
+    folder, filename = result
+    log(f"core={corename} folder={folder!r} file={filename!r}")
+
+    ext = os.path.splitext(filename)[1].lower()
+
+    if ext in (".mra", ".mgl"):
+        if ARCADE_SENTINEL in disabled:
+            log("arcade autoboot disabled by configuration, skipping")
+            return
+        # Arcade or shortcut already ready: bootcore loads it on its own.
+        set_bootcore(filename)
+        return
+
+    if corename in disabled:
+        log(f"core '{corename}' disabled by configuration, skipping")
+        return
+
+    profile = PROFILES.get(corename)
+    if not profile:
+        log(f"WARNING: no profile for corename={corename!r}, skipping")
+        return
+
+    full_path = os.path.join(resolve_abs_folder(folder), filename)
+
+    mgl_name = write_mgl(
+        rbf=profile["rbf"],
+        delay=profile["delay"],
+        file_type=profile["type"],
+        index=profile["index"],
+        path=full_path,
+    )
+    set_bootcore(mgl_name)
+
+
+def _menu_entries():
+    """Special arcade entry + one system for every corename in
+    PROFILES, in alphabetical order."""
+    entries = [(ARCADE_SENTINEL, ARCADE_LABEL)]
+    entries += [(name, name) for name in sorted(PROFILES)]
+    return entries
+
+
+def _render_menu(entries, enabled, disabled):
+    os.system("clear")
+    print("=" * 60)
+    print(" MnemoCore - configuration")
+    print("=" * 60)
+    print()
+    print(f"   0) [{'X' if enabled else ' '}] Autoboot enabled (general switch)")
+    print()
+    print(" Systems included in autoboot (only if the general switch is on):")
+    print()
+    for i, (key, label) in enumerate(entries, start=1):
+        mark = " " if key in disabled else "X"
+        print(f" {i:>3}) [{mark}] {label}")
+    print()
+    print("-" * 60)
+    print(" Type a number and Enter to toggle that entry.")
+    print(" a = enable all systems       n = disable all systems")
+    print(" s = save and exit            q = exit without saving")
+    print("-" * 60)
+
+
+def configure():
+    """Interactive text menu for the general switch and per-core
+    exclusions. Called by mnemocore.sh when launched by hand from the
+    Scripts menu (instead of from user-startup.sh)."""
+    entries = _menu_entries()
+    enabled, disabled = load_config()
+    dirty = False
+
+    while True:
+        _render_menu(entries, enabled, disabled)
+        choice = input("> ").strip().lower()
+
+        if choice == "q":
+            if dirty:
+                confirm = input("Exit without saving changes? [y/N] ").strip().lower()
+                if confirm != "y":
+                    continue
+            print("Exiting without saving.")
+            return
+
+        if choice == "s":
+            save_config(enabled, disabled)
+            print(f"Configuration saved to {CONFIG_FILE}")
+            print("Changes will be applied on the daemon's next poll (a few seconds at most).")
+            return
+
+        if choice == "0":
+            enabled = not enabled
+            dirty = True
+            continue
+
+        if choice == "a":
+            disabled.clear()
+            dirty = True
+            continue
+
+        if choice == "n":
+            disabled = {key for key, _ in entries}
+            dirty = True
+            continue
+
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(entries):
+                key = entries[idx][0]
+                if key in disabled:
+                    disabled.discard(key)
+                else:
+                    disabled.add(key)
+                dirty = True
+                continue
+
+        input("Invalid choice, press Enter to continue...")
+
+
+if __name__ == "__main__":
+    if "--configure" in sys.argv:
+        configure()
+    else:
+        main()
