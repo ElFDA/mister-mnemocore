@@ -17,6 +17,15 @@
 
 set -e
 
+cat << 'BANNER'
+ __  __                             ____
+|  \/  |_ __   ___ _ __ ___   ___  / ___|___  _ __ ___
+| |\/| | '_ \ / _ \ '_ ` _ \ / _ \| |   / _ \| '__/ _ \
+| |  | | | | |  __/ | | | | | (_) | |__| (_) | | |  __/
+|_|  |_|_| |_|\___|_| |_| |_|\___/ \____\___/|_|  \___|
+
+BANNER
+
 MEDIA_FAT="${MEDIA_FAT:-/media/fat}"
 RAW_BASE="https://raw.githubusercontent.com/ElFDA/mnemocore/master"
 
