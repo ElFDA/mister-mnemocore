@@ -86,6 +86,11 @@ PROFILES = {
     "Gameboy":         dict(rbf="_Console/Gameboy",         delay=2, index=1, type="f"),
     "Gamate":          dict(rbf="_Console/Gamate",          delay=1, index=1, type="f"),
     "GnW":             dict(rbf="_Console/GnW",             delay=1, index=1, type="f"),
+    # Same physical core also plays Game Gear (and SG-1000), so
+    # corename is "SMS" regardless of which one is loaded. index=1 is
+    # the Master System slot; Game Gear would need index=2 instead.
+    # Deliberately not addable as a separate profile (one entry per
+    # corename): kept on Master System.
     "SMS":             dict(rbf="_Console/SMS",             delay=1, index=1, type="f"),
     "GBA2P":           dict(rbf="_Console/GBA2P",           delay=2, index=0, type="f"),
     "GBA":             dict(rbf="_Console/GBA",             delay=2, index=1, type="f"),
@@ -93,7 +98,9 @@ PROFILES = {
     "Intellivision":   dict(rbf="_Console/Intellivision",   delay=1, index=1, type="f"),
     "MegaCD":          dict(rbf="_Console/MegaCD",          delay=1, index=0, type="s"),
     "N64":             dict(rbf="_Console/N64",             delay=1, index=1, type="f"),
-    "NeoGeo":          dict(rbf="_Console/NeoGeo",          delay=1, index=1, type="f"),
+    # /tmp/CORENAME is "NEOGEO" (all caps), not "NeoGeo" -- confirmed
+    # on real hardware, differs from the rbf/folder name casing.
+    "NEOGEO":          dict(rbf="_Console/NeoGeo",          delay=1, index=1, type="f"),
     "NES":             dict(rbf="_Console/NES",             delay=2, index=1, type="f"),
     "Odyssey2":        dict(rbf="_Console/Odyssey2",        delay=1, index=1, type="f"),
     "PSX":             dict(rbf="_Console/PSX",             delay=1, index=1, type="s"),
@@ -104,7 +111,9 @@ PROFILES = {
     "SGB":             dict(rbf="_Console/SGB",             delay=1, index=1, type="f"),
     "SNES":            dict(rbf="_Console/SNES",            delay=2, index=0, type="f"),
     "SuperVision":     dict(rbf="_Console/SuperVision",     delay=1, index=1, type="s"),
-    "TurboGrafx16":    dict(rbf="_Console/TurboGrafx16",    delay=1, index=0, type="f"),
+    # /tmp/CORENAME is "TGFX16", not "TurboGrafx16" -- confirmed on
+    # real hardware, differs from the rbf/folder name.
+    "TGFX16":          dict(rbf="_Console/TurboGrafx16",    delay=1, index=0, type="f"),
     "VC4000":          dict(rbf="_Console/VC4000",          delay=1, index=1, type="f"),
     "Vectrex":         dict(rbf="_Console/Vectrex",         delay=1, index=1, type="f"),
 
